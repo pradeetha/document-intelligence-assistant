@@ -22,6 +22,10 @@ builder.Services.AddScoped<
     IEmbeddingService,
     OllamaEmbeddingService>();
 
+builder.Services.AddScoped<
+    IQueryRewriter,
+    QueryRewriter>();
+
 builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IRagService, RagService>();
 

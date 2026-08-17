@@ -9,7 +9,8 @@ namespace EnterpriseAI.Api.Controllers;
 public class ChatController(
     IChatService chatService,
     IConversationService conversationService,
-    IRagService ragService) : ControllerBase
+    IRagService ragService,
+    IQueryRewriter queryRewriter) : ControllerBase
 {
     [HttpPost]
     public async Task<ActionResult<ChatResponse>> Chat(
@@ -54,9 +55,15 @@ public class ChatController(
                 conversationId,
                 cancellationToken);
         
+        var searchQuery =
+            await queryRewriter.RewriteAsync(
+                history,
+                request.Message,
+                cancellationToken);
+        
         var relevantChunks =
             await ragService.SearchAsync(
-                request.Message,
+                searchQuery,
                 3,
                 cancellationToken);
 
@@ -65,7 +72,9 @@ public class ChatController(
             return Ok(
                 new ChatResponse(
                     conversationId,
-                    "I couldn't find relevant information in the uploaded documents.", []));
+                    "I couldn't find relevant information in the uploaded documents.", 
+                    [],
+                    searchQuery));
         }
         
         var sources = relevantChunks
@@ -103,6 +112,7 @@ public class ChatController(
             new ChatResponse(
                 conversationId,
                 answer,
-                sources));
+                sources,
+                searchQuery));
     }
 }
