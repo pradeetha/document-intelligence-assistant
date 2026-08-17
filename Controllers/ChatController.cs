@@ -8,7 +8,8 @@ namespace EnterpriseAI.Api.Controllers;
 [Route("api/[controller]")]
 public class ChatController(
     IChatService chatService,
-    IConversationService conversationService) : ControllerBase
+    IConversationService conversationService,
+    IRagService ragService) : ControllerBase
 {
     [HttpPost]
     public async Task<ActionResult<ChatResponse>> Chat(
@@ -52,11 +53,20 @@ public class ChatController(
             await conversationService.GetMessagesAsync(
                 conversationId,
                 cancellationToken);
+        
+        var relevantChunks =
+            await ragService.SearchAsync(
+                request.Message,
+                3,
+                cancellationToken);
+
+        var context = string.Join("\n\n", relevantChunks.Select(chunk => chunk.Content));
 
         // Send history to LLM
         var answer =
             await chatService.GetResponseAsync(
                 history,
+                context,
                 cancellationToken);
 
         // Save AI response

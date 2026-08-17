@@ -14,6 +14,7 @@ public class ChatService(
 
     public async Task<string> GetResponseAsync(
         IReadOnlyList<ChatMessage> history,
+        string context,
         CancellationToken cancellationToken)
     {
         // Start with the fixed system instruction
@@ -21,6 +22,22 @@ public class ChatService(
         {
             new("system", _options.SystemPrompt)
         };
+        
+        if (!string.IsNullOrWhiteSpace(context))
+        {
+            messages.Add(
+                new(
+                    "system",
+                    $"""
+                     Relevant information from the uploaded documents:
+
+                     {context}
+
+                     Use this information to help answer the user's question.
+                     If the information is not sufficient to answer the question,
+                     say that you don't have enough information.
+                     """));
+        }
 
         // Convert our database messages into Ollama messages
         messages.AddRange(
