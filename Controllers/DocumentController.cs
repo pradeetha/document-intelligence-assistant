@@ -24,4 +24,23 @@ public class DocumentsController(
             DocumentId = documentId
         });
     }
+    
+    [HttpGet("search")]
+    public async Task<IActionResult> Search(
+        [FromQuery] string query,
+        [FromServices] IRagService ragService,
+        CancellationToken cancellationToken)
+    {
+        var results = await ragService.SearchAsync(
+            query,
+            3,
+            cancellationToken);
+
+        return Ok(results.Select(x => new
+        {
+            x.Id,
+            x.Content,
+            x.ChunkIndex
+        }));
+    }
 }
