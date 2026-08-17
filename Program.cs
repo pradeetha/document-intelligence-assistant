@@ -23,6 +23,7 @@ builder.Services.AddScoped<
     OllamaEmbeddingService>();
 
 builder.Services.AddScoped<IDocumentService, DocumentService>();
+builder.Services.AddScoped<IRagService, RagService>();
 
 builder.Services.AddDbContext<EnterpriseAiDbContext>(options =>
     options.UseSqlServer(
