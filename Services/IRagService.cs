@@ -8,4 +8,9 @@ public interface IRagService
         string query,
         int topK,
         CancellationToken cancellationToken);
+    
+    Task<IReadOnlyList<object>> DebugSearchAsync(
+        string query,
+        int topK,
+        CancellationToken cancellationToken);
 }

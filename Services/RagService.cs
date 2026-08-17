@@ -21,6 +21,7 @@ public class RagService(
 
         var chunks = await dbContext.DocumentChunks
             .AsNoTracking()
+            .Include(x => x.Document)
             .Where(x => x.Embedding != "")
             .ToListAsync(cancellationToken);
 
@@ -42,6 +43,7 @@ public class RagService(
                     Similarity = similarity
                 };
             })
+            .Where(x => x.Similarity >= 0.4)
             .OrderByDescending(x => x.Similarity)
             .Take(topK)
             .Select(x => x.Chunk)
@@ -80,5 +82,48 @@ public class RagService(
         return dotProduct /
                (Math.Sqrt(magnitudeA) *
                 Math.Sqrt(magnitudeB));
+    }
+    public async Task<IReadOnlyList<object>> DebugSearchAsync(
+        string query,
+        int topK,
+        CancellationToken cancellationToken)
+    {
+        var queryEmbedding =
+            await embeddingService.GenerateEmbeddingAsync(
+                query,
+                cancellationToken);
+
+        var chunks = await dbContext.DocumentChunks
+            .AsNoTracking()
+            .Include(x => x.Document)
+            .Where(x => x.Embedding != "")
+            .ToListAsync(cancellationToken);
+
+        var results = chunks
+            .Select(chunk =>
+            {
+                var embedding =
+                    JsonSerializer.Deserialize<float[]>(
+                        chunk.Embedding)!;
+
+                var similarity =
+                    CosineSimilarity(
+                        queryEmbedding,
+                        embedding);
+
+                return new
+                {
+                    FileName = chunk.Document.FileName,
+                    ChunkIndex = chunk.ChunkIndex,
+                    Content = chunk.Content,
+                    Similarity = similarity
+                };
+            })
+            .OrderByDescending(x => x.Similarity)
+            .Take(topK)
+            .Cast<object>()
+            .ToList();
+
+        return results;
     }
 }

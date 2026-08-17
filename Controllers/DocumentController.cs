@@ -43,4 +43,18 @@ public class DocumentsController(
             x.ChunkIndex
         }));
     }
+    
+    [HttpGet("debug-search")]
+    public async Task<ActionResult> DebugSearch(
+        string query,
+        [FromServices] IRagService ragService,
+        CancellationToken cancellationToken)
+    {
+        var results = await ragService.DebugSearchAsync(
+            query,
+            5,
+            cancellationToken);
+
+        return Ok(results);
+    }
 }
