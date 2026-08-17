@@ -6,5 +6,6 @@ public interface IChatService
 {
     Task<string> GetResponseAsync(
         IReadOnlyList<ChatMessage> history,
+        string context,
         CancellationToken cancellationToken);
 }
