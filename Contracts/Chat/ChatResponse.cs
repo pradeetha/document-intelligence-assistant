@@ -2,4 +2,6 @@ namespace EnterpriseAI.Api.Contracts.Chat;
 
 public record ChatResponse(
     Guid ConversationId,
-    string Message);
+    string Message,
+    IReadOnlyList<ChatSource> Sources
+    );

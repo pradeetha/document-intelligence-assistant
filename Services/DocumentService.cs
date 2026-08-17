@@ -71,18 +71,51 @@ public class DocumentService(
     private static List<(int Index, string Content)> CreateChunks(
         string text)
     {
-        const int chunkSize = 1000;
+        const int maxChunkSize = 1000;
 
-        var chunks = new List<(int, string)>();
+        var paragraphs = text
+            .Split(
+                ["\r\n\r\n", "\n\n"],
+                StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToList();
 
-        for (var i = 0; i < text.Length; i += chunkSize)
+        var chunks = new List<(int Index, string Content)>();
+
+        var currentChunk = new List<string>();
+        var currentLength = 0;
+
+        foreach (var paragraph in paragraphs)
         {
-            var length = Math.Min(
-                chunkSize,
-                text.Length - i);
+            if (currentLength + paragraph.Length > maxChunkSize
+                && currentChunk.Count > 0)
+            {
+                chunks.Add(
+                    (
+                        chunks.Count,
+                        string.Join(
+                            Environment.NewLine + Environment.NewLine,
+                            currentChunk)
+                    ));
 
+                currentChunk.Clear();
+                currentLength = 0;
+            }
+
+            currentChunk.Add(paragraph);
+            currentLength += paragraph.Length;
+        }
+
+        if (currentChunk.Count > 0)
+        {
             chunks.Add(
-                (chunks.Count, text.Substring(i, length)));
+                (
+                    chunks.Count,
+                    string.Join(
+                        Environment.NewLine + Environment.NewLine,
+                        currentChunk)
+                ));
         }
 
         return chunks;

@@ -60,7 +60,30 @@ public class ChatController(
                 3,
                 cancellationToken);
 
-        var context = string.Join("\n\n", relevantChunks.Select(chunk => chunk.Content));
+        if (relevantChunks.Count == 0)
+        {
+            return Ok(
+                new ChatResponse(
+                    conversationId,
+                    "I couldn't find relevant information in the uploaded documents.", []));
+        }
+        
+        var sources = relevantChunks
+            .Select(chunk =>
+                new ChatSource(
+                    chunk.Document.FileName,
+                    chunk.ChunkIndex))
+            .ToList();
+        
+        var context = string.Join(
+            "\n\n",
+            relevantChunks.Select(chunk =>
+            $"""
+             Source: {chunk.Document.FileName}
+             Chunk: {chunk.ChunkIndex}
+
+             {chunk.Content}
+             """));
 
         // Send history to LLM
         var answer =
@@ -79,6 +102,7 @@ public class ChatController(
         return Ok(
             new ChatResponse(
                 conversationId,
-                answer));
+                answer,
+                sources));
     }
 }

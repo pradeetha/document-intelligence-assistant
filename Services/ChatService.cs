@@ -23,21 +23,32 @@ public class ChatService(
             new("system", _options.SystemPrompt)
         };
         
-        if (!string.IsNullOrWhiteSpace(context))
-        {
-            messages.Add(
-                new(
-                    "system",
-                    $"""
-                     Relevant information from the uploaded documents:
+        var ragContext = string.IsNullOrWhiteSpace(context)
+            ? "No relevant information was found in the uploaded documents."
+            : context;
 
-                     {context}
+        messages.Add(
+            new(
+                "system",
+                $"""
+                 Answer the user's question using ONLY the information provided
+                 in the knowledge base context below.
 
-                     Use this information to help answer the user's question.
-                     If the information is not sufficient to answer the question,
-                     say that you don't have enough information.
-                     """));
-        }
+                 Knowledge base context:
+                 {ragContext}
+
+                 Rules:
+                 - Do not use your general knowledge to add facts.
+                 - Do not invent, assume, or infer facts that are not explicitly
+                   supported by the knowledge base.
+                 - If the knowledge base does not contain enough information,
+                   clearly say that the information is not available.
+                 - Do not combine unrelated information from different parts of
+                   the knowledge base to create an unsupported conclusion.
+                 - When answering, stay as close as possible to what the
+                   knowledge base actually states.
+                 """));
+        
 
         // Convert our database messages into Ollama messages
         messages.AddRange(
