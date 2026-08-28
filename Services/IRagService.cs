@@ -13,4 +13,10 @@ public interface IRagService
         string query,
         int topK,
         CancellationToken cancellationToken);
+    
+    Task<string> AskAsync(
+        string query,
+        IReadOnlyList<ChatMessage> history,
+        int topK,
+        CancellationToken cancellationToken);
 }

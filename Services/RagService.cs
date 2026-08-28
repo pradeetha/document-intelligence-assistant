@@ -1,4 +1,4 @@
-using System.Text.Json;
+using Microsoft.Data.SqlTypes;
 using EnterpriseAI.Api.Data;
 using EnterpriseAI.Api.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -7,7 +7,8 @@ namespace EnterpriseAI.Api.Services;
 
 public class RagService(
     EnterpriseAiDbContext dbContext,
-    IEmbeddingService embeddingService) : IRagService
+    IEmbeddingService embeddingService,
+    IChatService chatService) : IRagService
 {
     public async Task<IReadOnlyList<DocumentChunk>> SearchAsync(
         string query,
@@ -19,70 +20,29 @@ public class RagService(
                 query,
                 cancellationToken);
 
-        var chunks = await dbContext.DocumentChunks
+        var sqlVector =
+            new SqlVector<float>(queryEmbedding);
+
+        var results = await dbContext.DocumentChunks
             .AsNoTracking()
             .Include(x => x.Document)
-            .Where(x => x.Embedding != "")
-            .ToListAsync(cancellationToken);
-
-        var results = chunks
-            .Select(chunk =>
+            .Select(chunk => new
             {
-                var embedding =
-                    JsonSerializer.Deserialize<float[]>(
-                        chunk.Embedding)!;
-
-                var similarity =
-                    CosineSimilarity(
-                        queryEmbedding,
-                        embedding);
-
-                return new
-                {
-                    Chunk = chunk,
-                    Similarity = similarity
-                };
+                Chunk = chunk,
+                Distance = EF.Functions.VectorDistance(
+                    "cosine",
+                    chunk.Embedding,
+                    sqlVector)
             })
-            .Where(x => x.Similarity >= 0.4)
-            .OrderByDescending(x => x.Similarity)
+            .Where(x => x.Distance <= 0.30)
+            .OrderBy(x => x.Distance)
             .Take(topK)
             .Select(x => x.Chunk)
-            .ToList();
+            .ToListAsync(cancellationToken);
 
         return results;
     }
 
-    private static double CosineSimilarity(
-        float[] a,
-        float[] b)
-    {
-        if (a.Length != b.Length)
-        {
-            throw new InvalidOperationException(
-                "Embedding dimensions do not match.");
-        }
-
-        double dotProduct = 0;
-        double magnitudeA = 0;
-        double magnitudeB = 0;
-
-        for (var i = 0; i < a.Length; i++)
-        {
-            dotProduct += a[i] * b[i];
-
-            magnitudeA += a[i] * a[i];
-            magnitudeB += b[i] * b[i];
-        }
-
-        if (magnitudeA == 0 || magnitudeB == 0)
-        {
-            return 0;
-        }
-
-        return dotProduct /
-               (Math.Sqrt(magnitudeA) *
-                Math.Sqrt(magnitudeB));
-    }
     public async Task<IReadOnlyList<object>> DebugSearchAsync(
         string query,
         int topK,
@@ -93,37 +53,60 @@ public class RagService(
                 query,
                 cancellationToken);
 
-        var chunks = await dbContext.DocumentChunks
+        var sqlVector =
+            new SqlVector<float>(queryEmbedding);
+
+        var results = await dbContext.DocumentChunks
             .AsNoTracking()
             .Include(x => x.Document)
-            .Where(x => x.Embedding != "")
+            .Select(chunk => new
+            {
+                Chunk = chunk,
+                Distance = EF.Functions.VectorDistance(
+                    "cosine",
+                    chunk.Embedding,
+                    sqlVector)
+            })
+            .Where(x => x.Distance <= 0.30)
+            .OrderBy(x => x.Distance)
+            .Take(topK)
+            .Select(x => new
+            {
+                FileName = x.Chunk.Document.FileName,
+                ChunkIndex = x.Chunk.ChunkIndex,
+                Content = x.Chunk.Content,
+                Similarity = 1 - x.Distance
+            })
+            .Cast<object>()
             .ToListAsync(cancellationToken);
 
-        var results = chunks
-            .Select(chunk =>
-            {
-                var embedding =
-                    JsonSerializer.Deserialize<float[]>(
-                        chunk.Embedding)!;
-
-                var similarity =
-                    CosineSimilarity(
-                        queryEmbedding,
-                        embedding);
-
-                return new
-                {
-                    FileName = chunk.Document.FileName,
-                    ChunkIndex = chunk.ChunkIndex,
-                    Content = chunk.Content,
-                    Similarity = similarity
-                };
-            })
-            .OrderByDescending(x => x.Similarity)
-            .Take(topK)
-            .Cast<object>()
-            .ToList();
-
         return results;
+    }
+
+    public async Task<string> AskAsync(
+        string query,
+        IReadOnlyList<ChatMessage> history,
+        int topK,
+        CancellationToken cancellationToken)
+    {
+        var chunks = await SearchAsync(
+            query,
+            topK,
+            cancellationToken);
+
+        var context = string.Join(
+            "\n\n",
+            chunks.Select(chunk =>
+                $"""
+                 Document: {chunk.Document.FileName}
+                 Chunk: {chunk.ChunkIndex}
+
+                 {chunk.Content}
+                 """));
+
+        return await chatService.GetResponseAsync(
+            history,
+            context,
+            cancellationToken);
     }
 }

@@ -41,5 +41,9 @@ public class EnterpriseAiDbContext(
             .WithOne(x => x.Document)
             .HasForeignKey(x => x.DocumentId)
             .OnDelete(DeleteBehavior.Cascade);
+        
+        modelBuilder.Entity<DocumentChunk>()
+            .Property(x => x.Embedding)
+            .HasColumnType("vector(768)");
     }
 }

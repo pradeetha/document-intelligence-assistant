@@ -1,6 +1,7 @@
 using System.Text.Json;
 using EnterpriseAI.Api.Data;
 using EnterpriseAI.Api.Domain.Entities;
+using Microsoft.Data.SqlTypes;
 using Microsoft.EntityFrameworkCore;
 using UglyToad.PdfPig;
 
@@ -43,21 +44,24 @@ public class DocumentService(
             pdf.GetPages().Select(page => page.Text));
 
         var chunks = CreateChunks(fullText);
-
+        
+        
         foreach (var chunk in chunks)
         {
             var embedding =
                 await embeddingService.GenerateEmbeddingAsync(
                     chunk.Content,
                     cancellationToken);
-
+            
+            Console.WriteLine($"Embedding dimensions: {embedding.Length}");
+            
             document.Chunks.Add(
                 new DocumentChunk
                 {
                     Id = Guid.NewGuid(),
                     Content = chunk.Content,
                     ChunkIndex = chunk.Index,
-                    Embedding = JsonSerializer.Serialize(embedding)
+                    Embedding = new SqlVector<float>(embedding)
                 });
         }
 
@@ -71,51 +75,64 @@ public class DocumentService(
     private static List<(int Index, string Content)> CreateChunks(
         string text)
     {
-        const int maxChunkSize = 1000;
+        const int maxChunkSize = 600;
+        const int overlapSize = 100;
 
-        var paragraphs = text
-            .Split(
-                ["\r\n\r\n", "\n\n"],
-                StringSplitOptions.RemoveEmptyEntries)
-            .Select(x => x.Trim())
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .ToList();
+        var cleanedText = text
+            .Replace("\r\n", "\n")
+            .Replace("\r", "\n")
+            .Trim();
 
         var chunks = new List<(int Index, string Content)>();
 
-        var currentChunk = new List<string>();
-        var currentLength = 0;
+        var start = 0;
 
-        foreach (var paragraph in paragraphs)
+        while (start < cleanedText.Length)
         {
-            if (currentLength + paragraph.Length > maxChunkSize
-                && currentChunk.Count > 0)
+            var targetEnd = Math.Min(
+                start + maxChunkSize,
+                cleanedText.Length);
+
+            var end = targetEnd;
+
+            // Prefer a natural break near the target end.
+            if (targetEnd < cleanedText.Length)
+            {
+                var lastSpace = cleanedText.LastIndexOf(
+                    ' ',
+                    targetEnd - 1,
+                    maxChunkSize);
+
+                if (lastSpace > start)
+                {
+                    end = lastSpace;
+                }
+            }
+
+            var content = cleanedText[start..end].Trim();
+
+            if (!string.IsNullOrWhiteSpace(content))
             {
                 chunks.Add(
                     (
                         chunks.Count,
-                        string.Join(
-                            Environment.NewLine + Environment.NewLine,
-                            currentChunk)
+                        content
                     ));
-
-                currentChunk.Clear();
-                currentLength = 0;
             }
 
-            currentChunk.Add(paragraph);
-            currentLength += paragraph.Length;
-        }
+            if (end >= cleanedText.Length)
+            {
+                break;
+            }
 
-        if (currentChunk.Count > 0)
-        {
-            chunks.Add(
-                (
-                    chunks.Count,
-                    string.Join(
-                        Environment.NewLine + Environment.NewLine,
-                        currentChunk)
-                ));
+            // Move forward while retaining overlap.
+            start = end - overlapSize;
+
+            // Safety check to guarantee progress.
+            if (start <= 0)
+            {
+                start = end;
+            }
         }
 
         return chunks;

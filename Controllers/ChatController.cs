@@ -42,25 +42,23 @@ public class ChatController(
             }
         }
 
-        // Save user's message
         await conversationService.AddMessageAsync(
             conversationId,
             "user",
             request.Message,
             cancellationToken);
 
-        // Get complete conversation history
         var history =
             await conversationService.GetMessagesAsync(
                 conversationId,
                 cancellationToken);
-        
+
         var searchQuery =
             await queryRewriter.RewriteAsync(
                 history,
                 request.Message,
                 cancellationToken);
-        
+
         var relevantChunks =
             await ragService.SearchAsync(
                 searchQuery,
@@ -72,18 +70,18 @@ public class ChatController(
             return Ok(
                 new ChatResponse(
                     conversationId,
-                    "I couldn't find relevant information in the uploaded documents.", 
+                    "I couldn't find relevant information in the uploaded documents.",
                     [],
                     searchQuery));
         }
-        
+
         var sources = relevantChunks
             .Select(chunk =>
                 new ChatSource(
                     chunk.Document.FileName,
                     chunk.ChunkIndex))
             .ToList();
-        
+
         var context = string.Join(
             "\n\n",
             relevantChunks.Select(chunk =>
@@ -94,14 +92,12 @@ public class ChatController(
              {chunk.Content}
              """));
 
-        // Send history to LLM
         var answer =
             await chatService.GetResponseAsync(
                 history,
                 context,
                 cancellationToken);
 
-        // Save AI response
         await conversationService.AddMessageAsync(
             conversationId,
             "assistant",
