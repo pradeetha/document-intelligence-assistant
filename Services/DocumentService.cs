@@ -75,64 +75,58 @@ public class DocumentService(
     private static List<(int Index, string Content)> CreateChunks(
         string text)
     {
-        const int maxChunkSize = 600;
-        const int overlapSize = 100;
+        const int maxChunkSize = 1000;
+        const int overlapSentences = 1;
 
-        var cleanedText = text
-            .Replace("\r\n", "\n")
-            .Replace("\r", "\n")
-            .Trim();
+        var sentences = text
+            .Split(
+                ['.', '!', '?'],
+                StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x + ".")
+            .ToList();
 
         var chunks = new List<(int Index, string Content)>();
 
-        var start = 0;
+        var currentSentences = new List<string>();
+        var currentLength = 0;
 
-        while (start < cleanedText.Length)
+        foreach (var sentence in sentences)
         {
-            var targetEnd = Math.Min(
-                start + maxChunkSize,
-                cleanedText.Length);
-
-            var end = targetEnd;
-
-            // Prefer a natural break near the target end.
-            if (targetEnd < cleanedText.Length)
+            if (currentLength + sentence.Length > maxChunkSize
+                && currentSentences.Count > 0)
             {
-                var lastSpace = cleanedText.LastIndexOf(
-                    ' ',
-                    targetEnd - 1,
-                    maxChunkSize);
+                var chunkContent = string.Join(
+                    " ",
+                    currentSentences);
 
-                if (lastSpace > start)
-                {
-                    end = lastSpace;
-                }
-            }
-
-            var content = cleanedText[start..end].Trim();
-
-            if (!string.IsNullOrWhiteSpace(content))
-            {
                 chunks.Add(
                     (
                         chunks.Count,
-                        content
+                        chunkContent
                     ));
+
+                // Keep the last sentence as overlap.
+                var overlap = currentSentences
+                    .TakeLast(overlapSentences)
+                    .ToList();
+
+                currentSentences = overlap;
+                currentLength = overlap.Sum(x => x.Length);
             }
 
-            if (end >= cleanedText.Length)
-            {
-                break;
-            }
+            currentSentences.Add(sentence);
+            currentLength += sentence.Length;
+        }
 
-            // Move forward while retaining overlap.
-            start = end - overlapSize;
-
-            // Safety check to guarantee progress.
-            if (start <= 0)
-            {
-                start = end;
-            }
+        if (currentSentences.Count > 0)
+        {
+            chunks.Add(
+                (
+                    chunks.Count,
+                    string.Join(" ", currentSentences)
+                ));
         }
 
         return chunks;
