@@ -1,6 +1,7 @@
 using System.Text.Json;
 using EnterpriseAI.Api.Data;
 using EnterpriseAI.Api.Domain.Entities;
+using Microsoft.Data.SqlTypes;
 using Microsoft.EntityFrameworkCore;
 using UglyToad.PdfPig;
 
@@ -43,21 +44,24 @@ public class DocumentService(
             pdf.GetPages().Select(page => page.Text));
 
         var chunks = CreateChunks(fullText);
-
+        
+        
         foreach (var chunk in chunks)
         {
             var embedding =
                 await embeddingService.GenerateEmbeddingAsync(
                     chunk.Content,
                     cancellationToken);
-
+            
+            Console.WriteLine($"Embedding dimensions: {embedding.Length}");
+            
             document.Chunks.Add(
                 new DocumentChunk
                 {
                     Id = Guid.NewGuid(),
                     Content = chunk.Content,
                     ChunkIndex = chunk.Index,
-                    Embedding = JsonSerializer.Serialize(embedding)
+                    Embedding = new SqlVector<float>(embedding)
                 });
         }
 
@@ -72,49 +76,56 @@ public class DocumentService(
         string text)
     {
         const int maxChunkSize = 1000;
+        const int overlapSentences = 1;
 
-        var paragraphs = text
+        var sentences = text
             .Split(
-                ["\r\n\r\n", "\n\n"],
+                ['.', '!', '?'],
                 StringSplitOptions.RemoveEmptyEntries)
             .Select(x => x.Trim())
             .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x + ".")
             .ToList();
 
         var chunks = new List<(int Index, string Content)>();
 
-        var currentChunk = new List<string>();
+        var currentSentences = new List<string>();
         var currentLength = 0;
 
-        foreach (var paragraph in paragraphs)
+        foreach (var sentence in sentences)
         {
-            if (currentLength + paragraph.Length > maxChunkSize
-                && currentChunk.Count > 0)
+            if (currentLength + sentence.Length > maxChunkSize
+                && currentSentences.Count > 0)
             {
+                var chunkContent = string.Join(
+                    " ",
+                    currentSentences);
+
                 chunks.Add(
                     (
                         chunks.Count,
-                        string.Join(
-                            Environment.NewLine + Environment.NewLine,
-                            currentChunk)
+                        chunkContent
                     ));
 
-                currentChunk.Clear();
-                currentLength = 0;
+                // Keep the last sentence as overlap.
+                var overlap = currentSentences
+                    .TakeLast(overlapSentences)
+                    .ToList();
+
+                currentSentences = overlap;
+                currentLength = overlap.Sum(x => x.Length);
             }
 
-            currentChunk.Add(paragraph);
-            currentLength += paragraph.Length;
+            currentSentences.Add(sentence);
+            currentLength += sentence.Length;
         }
 
-        if (currentChunk.Count > 0)
+        if (currentSentences.Count > 0)
         {
             chunks.Add(
                 (
                     chunks.Count,
-                    string.Join(
-                        Environment.NewLine + Environment.NewLine,
-                        currentChunk)
+                    string.Join(" ", currentSentences)
                 ));
         }
 

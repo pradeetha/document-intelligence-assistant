@@ -1,3 +1,5 @@
+using Microsoft.Data.SqlTypes;
+
 namespace EnterpriseAI.Api.Domain.Entities;
 
 public class DocumentChunk
@@ -10,7 +12,7 @@ public class DocumentChunk
 
     public int ChunkIndex { get; set; }
 
-    public string Embedding { get; set; } = string.Empty;
+    public SqlVector<float> Embedding { get; set; }
 
     public Document Document { get; set; } = null!;
 }

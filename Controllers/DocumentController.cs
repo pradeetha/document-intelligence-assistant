@@ -1,3 +1,4 @@
+using EnterpriseAI.Api.Domain.Entities;
 using EnterpriseAI.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -56,5 +57,32 @@ public class DocumentsController(
             cancellationToken);
 
         return Ok(results);
+    }
+    
+    [HttpGet("ask")]
+    public async Task<IActionResult> Ask(
+        [FromQuery] string query,
+        [FromServices] IRagService ragService,
+        CancellationToken cancellationToken)
+    {
+        var history = new List<ChatMessage>
+        {
+            new()
+            {
+                Role = "user",
+                Content = query
+            }
+        };
+
+        var answer = await ragService.AskAsync(
+            query,
+            history,
+            3,
+            cancellationToken);
+
+        return Ok(new
+        {
+            Answer = answer
+        });
     }
 }
